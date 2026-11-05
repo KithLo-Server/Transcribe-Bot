@@ -1,0 +1,39 @@
+name: transcribe_bot
+
+services:
+  transcribe_bot:
+    image: transcribe_bot
+    container_name: transcribe_bot
+    restart: unless-stopped
+    pull_policy: never
+    build:
+      context: .
+    cpu_shares: 256
+    stop_grace_period: 30s
+    environment:
+      - TRANSCRIBE_BOT_TOKEN=${TRANSCRIBE_BOT_TOKEN}
+      - "TRANSCRIBE_ADMIN_USER_ID=${TRANSCRIBE_ADMIN_USER_ID:-}"
+      - "TELEGRAM_API_BASE_URL=http://telegram_bot:8081/bot"
+      - "TELEGRAM_API_FILE_BASE_URL=http://telegram_bot:8081/file/bot"
+      - SECURITY_QUESTIONS_FILE=/data/bot/security_questions.json
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - "GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}"
+      - "GEMINI_CHUNK_MODEL=${GEMINI_CHUNK_MODEL:-gemini-3.1-flash-lite}"
+      - "GEMINI_C2W_MODEL=${GEMINI_C2W_MODEL:-gemini-3.8-flash}"
+      - "GEMINI_MODEL_COOLDOWN_SECONDS=${GEMINI_MODEL_COOLDOWN_SECONDS:-60}"
+      - "GEMINI_QUOTA_COOLDOWN_SECONDS=${GEMINI_QUOTA_COOLDOWN_SECONDS:-60}"
+      - "GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS=${GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS:-3600}"
+      - CPU_THREADS=4
+      - REFINE_CONCURRENCY=10
+      - DATA_DIR=/data/bot
+    volumes:
+      - "${TRANSCRIBE_DATA}/bot:/data/bot"
+      - "${TRANSCRIBE_DATA}/cache:/data/cache"
+      - "${TELEGRAM_BOT_API_DATA}:/var/lib/telegram-bot-api:ro"
+    networks:
+      telegram_bot:
+
+networks:
+  telegram_bot:
+    name: telegram_bot
+    external: true

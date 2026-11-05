@@ -1,0 +1,64 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, shared]
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_BOT_API_DATA: ${{ vars.TELEGRAM_BOT_API_DATA }}
+      TRANSCRIBE_ADMIN_USER_ID: ${{ vars.TRANSCRIBE_ADMIN_USER_ID }}
+      TRANSCRIBE_BOT_TOKEN: ${{ secrets.TRANSCRIBE_BOT_TOKEN }}
+      TRANSCRIBE_DATA: ${{ vars.TRANSCRIBE_DATA }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate compose variables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=()
+          while read -r var; do
+            if [ "$var" = "HOME" ]; then
+              continue
+            fi
+
+            if [ -z "${!var:-}" ]; then
+              missing+=("$var")
+            fi
+          done < <(
+            grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' docker-compose.yml \
+              | sed -E 's/^\$\{//; s/\}$//' \
+              | sort -u
+          )
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required compose variables: ${missing[*]}"
+            exit 1
+          fi
+
+          echo "All required compose variables are defined."
+
+      - name: Deploy
+        shell: bash
+        run: docker compose up -d --build --remove-orphans
+
+      - name: Show container status
+        if: always()
+        shell: bash
+        run: docker compose ps -a
