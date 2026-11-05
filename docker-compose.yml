@@ -13,8 +13,8 @@ services:
     environment:
       - TRANSCRIBE_BOT_TOKEN=${TRANSCRIBE_BOT_TOKEN}
       - "TRANSCRIBE_ADMIN_USER_ID=${TRANSCRIBE_ADMIN_USER_ID:-}"
-      - "TELEGRAM_API_BASE_URL=http://telegram_bot:8081/bot"
-      - "TELEGRAM_API_FILE_BASE_URL=http://telegram_bot:8081/file/bot"
+      - "TELEGRAM_API_BASE_URL=http://telegram_bot_api_server:8081/bot"
+      - "TELEGRAM_API_FILE_BASE_URL=http://telegram_bot_api_server:8081/file/bot"
       - SECURITY_QUESTIONS_FILE=/data/bot/security_questions.json
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - "GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}"
