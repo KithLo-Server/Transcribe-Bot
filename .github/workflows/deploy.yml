@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, shared]
+    runs-on: self-hosted
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       TELEGRAM_BOT_API_DATA: ${{ vars.TELEGRAM_BOT_API_DATA }}
