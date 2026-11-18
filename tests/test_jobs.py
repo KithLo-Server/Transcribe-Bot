@@ -6,6 +6,7 @@ import tempfile
 import time
 import types
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -35,6 +36,7 @@ if "core" not in sys.modules:
 
 import config  # noqa: E402
 import core  # noqa: E402
+import jobs  # noqa: E402
 import state  # noqa: E402
 from cache import CacheStore, sha256_text  # noqa: E402
 from jobs import JobManager  # noqa: E402
@@ -74,6 +76,22 @@ def make_job(job_id, priority, sequence, user_id=1):
         c2w=False,
         char_limit=30,
     )
+
+
+class _FixedDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc)
+
+
+def format_reset_at(tz: str, retry_after: float) -> str:
+    with mock.patch.object(config, "TZ", tz):
+        jobs._display_timezone.cache_clear()
+        try:
+            with mock.patch.object(jobs, "datetime", _FixedDatetime):
+                return JobManager._quota_reset_time(retry_after)
+        finally:
+            jobs._display_timezone.cache_clear()
 
 
 class PriorityQueueTests(unittest.TestCase):
@@ -654,6 +672,21 @@ class PriorityQueueTests(unittest.TestCase):
         self.assertIsNotNone(markup)
         button = markup.inline_keyboard[0][0]
         self.assertEqual(button.callback_data, "tb:refine:retry:quota")
+
+    def test_quota_reset_time_uses_configured_timezone(self):
+        text = format_reset_at("Asia/Tokyo", 3600)
+
+        self.assertEqual(text, "2025-01-01 10:00 JST")
+
+    def test_quota_reset_time_defaults_to_utc(self):
+        text = format_reset_at("UTC", 3600)
+
+        self.assertEqual(text, "2025-01-01 01:00 UTC")
+
+    def test_quota_reset_time_falls_back_for_unknown_timezone(self):
+        text = format_reset_at("Not/AZone", 3600)
+
+        self.assertEqual(text, "2025-01-01 01:00 UTC")
 
     def test_model_cooldown_shows_reset_time_and_retry(self):
         bot = FakeBot()

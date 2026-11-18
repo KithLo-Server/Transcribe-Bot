@@ -99,6 +99,8 @@ GEMINI_RETRY_WINDOW_SECONDS = int(
     os.getenv("GEMINI_RETRY_WINDOW_SECONDS", "900")
 )
 
+TZ = os.getenv("TZ", "UTC").strip() or "UTC"
+
 CPU_THREADS = int(os.getenv("CPU_THREADS", "4"))
 REFINE_CONCURRENCY = int(os.getenv("REFINE_CONCURRENCY", "10"))
 REFINE_CHUNK_TOKENS = int(os.getenv("REFINE_CHUNK_TOKENS", "4000"))

@@ -6,7 +6,9 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Deque, Dict, Optional, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import chunking
 import config
@@ -57,6 +59,18 @@ async def _safe_send_markup(bot, chat_id: int, text: str, reply_markup):
         logger.warning("Could not send keyboard message to %s: %s", chat_id, exc)
         await _safe_send(bot, chat_id, text)
         return None
+
+
+@lru_cache(maxsize=None)
+def _display_timezone() -> timezone | ZoneInfo:
+    """Returns the configured display timezone, falling back to UTC."""
+    try:
+        return ZoneInfo(config.TZ)
+    except (ZoneInfoNotFoundError, ValueError):
+        logger.warning(
+            "Unknown TZ %r; using UTC for message timestamps.", config.TZ
+        )
+        return timezone.utc
 
 
 class JobManager:
@@ -332,7 +346,9 @@ class JobManager:
     def _quota_reset_time(retry_after: Optional[float]) -> str:
         seconds = retry_after if retry_after is not None else 0
         reset_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-        return reset_at.strftime("%Y-%m-%d %H:%M UTC")
+        return reset_at.astimezone(_display_timezone()).strftime(
+            "%Y-%m-%d %H:%M %Z"
+        )
 
     def _start_retry_task(
         self, job_id: str, refinement: RefinementJob, delay: float

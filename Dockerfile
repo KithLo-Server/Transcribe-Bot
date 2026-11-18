@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     libsox3 \
     libgomp1 \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

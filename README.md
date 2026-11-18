@@ -148,6 +148,7 @@ All settings are environment variables read by `src/config.py`.
 | `TELEGRAM_CONNECT_TIMEOUT` | `30` | Telegram connect timeout in seconds. |
 | `TELEGRAM_POOL_TIMEOUT` | `30` | Telegram connection pool timeout in seconds. |
 | `TELEGRAM_MEDIA_WRITE_TIMEOUT` | `600` | Telegram media upload timeout in seconds. |
+| `TZ` | `UTC` | IANA timezone used for timestamps in bot messages and container logs. |
 
 ## Data Layout
 
@@ -196,6 +197,7 @@ Optional GitHub variables override the compose defaults; leave them unset to use
 - `GEMINI_MODEL`, `GEMINI_CHUNK_MODEL`, `GEMINI_C2W_MODEL`
 - `GEMINI_MODEL_COOLDOWN_SECONDS`, `GEMINI_QUOTA_COOLDOWN_SECONDS`, `GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS`, `GEMINI_RETRY_WINDOW_SECONDS`
 - `CPU_THREADS`, `REFINE_CONCURRENCY`
+- `TZ`
 
 ## Project Layout
 

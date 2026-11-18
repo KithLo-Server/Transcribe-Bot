@@ -31,6 +31,7 @@ jobs:
       TRANSCRIBE_ADMIN_USER_ID: ${{ vars.TRANSCRIBE_ADMIN_USER_ID }}
       TRANSCRIBE_BOT_TOKEN: ${{ secrets.TRANSCRIBE_BOT_TOKEN }}
       TRANSCRIBE_DATA: ${{ vars.TRANSCRIBE_DATA }}
+      TZ: ${{ vars.TZ }}
 
     steps:
       - name: Check out repository
