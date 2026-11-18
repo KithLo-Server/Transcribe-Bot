@@ -189,6 +189,13 @@ Required GitHub configuration:
 - Secrets: `TRANSCRIBE_BOT_TOKEN`, `GEMINI_API_KEY`
 - Variables: `TRANSCRIBE_DATA`, `TELEGRAM_BOT_API_DATA`, `TRANSCRIBE_ADMIN_USER_ID`
 
+Optional GitHub variables override the compose defaults; leave them unset to use the values in the configuration table above:
+
+- `TRANSCRIBE_ADMIN_USER_ID`
+- `GEMINI_MODEL`, `GEMINI_CHUNK_MODEL`, `GEMINI_C2W_MODEL`
+- `GEMINI_MODEL_COOLDOWN_SECONDS`, `GEMINI_QUOTA_COOLDOWN_SECONDS`, `GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS`
+- `CPU_THREADS`, `REFINE_CONCURRENCY`
+
 ## Project Layout
 
 | Path | Responsibility |
