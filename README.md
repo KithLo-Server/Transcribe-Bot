@@ -135,6 +135,7 @@ All settings are environment variables read by `src/config.py`.
 | `GEMINI_MODEL_COOLDOWN_SECONDS` | `60` | Cooldown after a model returns 503. |
 | `GEMINI_QUOTA_COOLDOWN_SECONDS` | `60` | Cooldown for a key after a short-lived 429. |
 | `GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS` | `3600` | Cooldown for a key after daily quota exhaustion. |
+| `GEMINI_RETRY_WINDOW_SECONDS` | `900` | Total time refinements keep retrying transient Gemini quota/model failures before prompting the user. |
 | `CPU_THREADS` | `4` | CPU threads for transcription and model inference. |
 | `REFINE_CONCURRENCY` | `10` | Maximum concurrent refinement jobs. |
 | `REFINE_CHUNK_TOKENS` | `4000` | Target chunk size for refinement. |
@@ -193,7 +194,7 @@ Optional GitHub variables override the compose defaults; leave them unset to use
 
 - `TRANSCRIBE_ADMIN_USER_ID`
 - `GEMINI_MODEL`, `GEMINI_CHUNK_MODEL`, `GEMINI_C2W_MODEL`
-- `GEMINI_MODEL_COOLDOWN_SECONDS`, `GEMINI_QUOTA_COOLDOWN_SECONDS`, `GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS`
+- `GEMINI_MODEL_COOLDOWN_SECONDS`, `GEMINI_QUOTA_COOLDOWN_SECONDS`, `GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS`, `GEMINI_RETRY_WINDOW_SECONDS`
 - `CPU_THREADS`, `REFINE_CONCURRENCY`
 
 ## Project Layout

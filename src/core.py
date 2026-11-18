@@ -704,7 +704,7 @@ def _generate(
             raise
         logger.warning(
             "Gemini quota/rate limit exhausted: job_id=%s; retry after "
-            "%.0fs instead of retrying automatically.",
+            "%.0fs.",
             _log_job_id(job_id),
             quota_retry_after,
         )

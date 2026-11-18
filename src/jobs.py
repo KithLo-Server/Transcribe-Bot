@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # A failed refinement keeps its job record so the user can retry from the chat.
 REFINE_FAILED = "refine_failed"
+# A refinement waiting for an automatic retry after a transient Gemini error.
+REFINE_RETRYING = "refine_retrying"
 
 
 def _remove_file(path: Optional[str]) -> None:
@@ -64,6 +66,7 @@ class JobManager:
         self.refine_semaphore = asyncio.Semaphore(config.REFINE_CONCURRENCY)
         self._worker_task: Optional[asyncio.Task] = None
         self._refine_tasks = set()
+        self._retry_tasks = set()
         self._review_queues: Dict[int, Deque[Tuple[str, str]]] = {}
         self._review_active: Dict[int, str] = {}
         self._review_resolving: Dict[int, str] = {}
@@ -82,6 +85,10 @@ class JobManager:
             task.cancel()
         if self._refine_tasks:
             await asyncio.gather(*self._refine_tasks, return_exceptions=True)
+        for task in list(self._retry_tasks):
+            task.cancel()
+        if self._retry_tasks:
+            await asyncio.gather(*self._retry_tasks, return_exceptions=True)
 
     async def resume(self) -> None:
         """Rebuilds queues and resumes work left behind by a previous process."""
@@ -96,6 +103,8 @@ class JobManager:
                     await self._resume_refinement_review(record)
                 elif record.status == "refining":
                     await self._resume_refinement(record)
+                elif record.status == REFINE_RETRYING:
+                    await self._resume_retry(record)
                 elif record.status == REFINE_FAILED:
                     await self._resume_failed_refinement(record)
                 else:
@@ -306,6 +315,8 @@ class JobManager:
         if record is not None:
             record.status = REFINE_FAILED
             record.refinement = refinement
+            record.retry_started_at = None
+            record.retry_next_at = None
         state.save_runtime()
         if record is not None:
             await self._send_failure_prompt(record, text)
@@ -322,6 +333,120 @@ class JobManager:
         seconds = retry_after if retry_after is not None else 0
         reset_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
         return reset_at.strftime("%Y-%m-%d %H:%M UTC")
+
+    def _start_retry_task(
+        self, job_id: str, refinement: RefinementJob, delay: float
+    ) -> None:
+        task = asyncio.create_task(
+            self._auto_retry(job_id, refinement, delay)
+        )
+        self._retry_tasks.add(task)
+        task.add_done_callback(self._retry_tasks.discard)
+
+    async def _handle_retryable_failure(
+        self,
+        job_id: str,
+        refinement: RefinementJob,
+        exc: BaseException,
+        message_key: str,
+    ) -> None:
+        """Retries transient Gemini errors until the retry window is used up."""
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after is None:
+            retry_after = float(config.GEMINI_QUOTA_COOLDOWN_SECONDS)
+        retry_after = max(0.0, float(retry_after))
+
+        record = state.jobs_by_id.get(job_id)
+        now = time.time()
+        if record is None:
+            await self._fail_refinement(
+                job_id,
+                refinement,
+                i18n.t(
+                    refinement.locale,
+                    message_key,
+                    reset_at=self._quota_reset_time(retry_after),
+                ),
+            )
+            return
+
+        if record.retry_started_at is None:
+            record.retry_started_at = now
+        deadline = record.retry_started_at + max(
+            0, config.GEMINI_RETRY_WINDOW_SECONDS
+        )
+
+        if now >= deadline or now + retry_after > deadline:
+            logger.info(
+                "Refinement retry exceeds window: job_id=%s retry_after=%.0fs",
+                job_id,
+                retry_after,
+            )
+            await self._fail_refinement(
+                job_id,
+                refinement,
+                i18n.t(
+                    refinement.locale,
+                    message_key,
+                    reset_at=self._quota_reset_time(retry_after),
+                ),
+            )
+            return
+
+        record.status = REFINE_RETRYING
+        record.retry_next_at = now + retry_after
+        state.save_runtime()
+        logger.info(
+            "Scheduling automatic refinement retry: job_id=%s in %.0fs",
+            job_id,
+            retry_after,
+        )
+        self._start_retry_task(job_id, refinement, retry_after)
+
+    async def _auto_retry(
+        self, job_id: str, refinement: RefinementJob, delay: float
+    ) -> None:
+        """Waits for the cooldown, then reruns refinement without prompting."""
+        try:
+            if delay > 0:
+                await asyncio.sleep(delay)
+            record = state.jobs_by_id.get(job_id)
+            if record is None or record.status != REFINE_RETRYING:
+                return
+            record.status = "refining"
+            record.retry_next_at = None
+            state.save_runtime()
+            logger.info("Retrying refinement automatically: job_id=%s", job_id)
+            await self._run_refinement(job_id, refinement)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Automatic refinement retry failed: job_id=%s", job_id
+            )
+
+    async def _resume_retry(self, record: JobRecord) -> None:
+        if not await self._hydrate_raw_text(record):
+            await self._resume_transcription(record)
+            return
+
+        refinement = self._refinement_for(record)
+        record.refinement = refinement
+        now = time.time()
+        if record.retry_started_at is None:
+            record.retry_started_at = now
+        deadline = record.retry_started_at + max(
+            0, config.GEMINI_RETRY_WINDOW_SECONDS
+        )
+        next_at = (
+            record.retry_next_at
+            if record.retry_next_at is not None
+            else now
+        )
+        delay = max(0.0, min(next_at, deadline) - now)
+        record.status = REFINE_RETRYING
+        state.save_runtime()
+        self._start_retry_task(record.job.job_id, refinement, delay)
 
     async def _resume_failed_refinement(self, record: JobRecord) -> None:
         """Re-offers the Retry button when the failure prompt was not sent."""
@@ -624,6 +749,8 @@ class JobManager:
     ) -> None:
         record.refinement = refinement
         record.status = "refining"
+        record.retry_started_at = None
+        record.retry_next_at = None
         state.save_runtime()
         await _safe_send(
             self.bot,
@@ -670,23 +797,23 @@ class JobManager:
                     job_id,
                     exc,
                 )
-                text = i18n.t(
-                    refinement.locale,
+                await self._handle_retryable_failure(
+                    job_id,
+                    refinement,
+                    exc,
                     "job.quota_exhausted",
-                    reset_at=self._quota_reset_time(exc.retry_after),
                 )
-                await self._fail_refinement(job_id, refinement, text)
                 return
             except core._ModelUnavailable as exc:
                 logger.warning(
                     "Refinement job %s hit a model cooldown: %s", job_id, exc
                 )
-                text = i18n.t(
-                    refinement.locale,
+                await self._handle_retryable_failure(
+                    job_id,
+                    refinement,
+                    exc,
                     "job.model_unavailable",
-                    reset_at=self._quota_reset_time(exc.retry_after),
                 )
-                await self._fail_refinement(job_id, refinement, text)
                 return
             except Exception as exc:
                 logger.exception("Refinement job %s failed", job_id)

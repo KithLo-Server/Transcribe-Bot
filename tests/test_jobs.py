@@ -3,6 +3,7 @@
 import asyncio
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -662,8 +663,11 @@ class PriorityQueueTests(unittest.TestCase):
 
         async def run():
             manager = JobManager(bot)
-            with mock.patch.object(core, "refine", side_effect=error):
-                await manager._run_refinement(refinement.job_id, refinement)
+            with mock.patch.object(config, "GEMINI_RETRY_WINDOW_SECONDS", 0):
+                with mock.patch.object(core, "refine", side_effect=error):
+                    await manager._run_refinement(
+                        refinement.job_id, refinement
+                    )
 
         asyncio.run(run())
 
@@ -676,6 +680,126 @@ class PriorityQueueTests(unittest.TestCase):
         self.assertIsNotNone(markup)
         button = markup.inline_keyboard[0][0]
         self.assertEqual(button.callback_data, "tb:refine:retry:cooldown")
+
+    def test_quota_failure_retries_automatically_and_delivers(self):
+        bot = FakeBot()
+        record = self._failed_refinement_record("auto")
+        refinement = record.refinement
+        error = core._QuotaExhausted(
+            "Gemini quota is exhausted.", retry_after=0
+        )
+        outcomes = [error, "refined text"]
+
+        def fake_refine(*args, **kwargs):
+            result = outcomes.pop(0)
+            if isinstance(result, BaseException):
+                raise result
+            return result
+
+        async def run():
+            manager = JobManager(bot)
+            with mock.patch.object(core, "refine", side_effect=fake_refine):
+                await manager._run_refinement(
+                    refinement.job_id, refinement
+                )
+                self.assertEqual(
+                    state.jobs_by_id["auto"].status, "refine_retrying"
+                )
+                self.assertEqual(bot.messages, [])
+                retries = list(manager._retry_tasks)
+                if retries:
+                    await asyncio.gather(*retries)
+
+        asyncio.run(run())
+
+        self.assertNotIn("auto", state.jobs_by_id)
+        self.assertEqual(len(bot.documents), 1)
+        self.assertEqual(bot.messages, [])
+
+    def test_retry_window_exhausted_shows_prompt(self):
+        bot = FakeBot()
+        record = self._failed_refinement_record("expired")
+        record.retry_started_at = (
+            time.time() - config.GEMINI_RETRY_WINDOW_SECONDS - 1
+        )
+        state.jobs_by_id["expired"] = record
+        refinement = record.refinement
+        error = core._QuotaExhausted(
+            "Gemini quota is exhausted.", retry_after=0
+        )
+
+        async def run():
+            manager = JobManager(bot)
+            with mock.patch.object(core, "refine", side_effect=error):
+                await manager._run_refinement(
+                    refinement.job_id, refinement
+                )
+
+        asyncio.run(run())
+
+        self.assertEqual(state.jobs_by_id["expired"].status, "refine_failed")
+        self.assertIsNotNone(state.jobs_by_id["expired"].retry_message_id)
+        self.assertEqual(len(bot.messages), 1)
+        _, text, markup = bot.messages[0]
+        self.assertIn("Gemini quota is exhausted", text)
+        self.assertIsNotNone(markup)
+
+    def test_retry_refinement_resets_retry_window(self):
+        bot = FakeBot()
+        record = self._failed_refinement_record("reset")
+        record.status = "refine_failed"
+        record.retry_started_at = time.time() - 1000
+        record.retry_next_at = time.time()
+        refinement = record.refinement
+
+        async def run():
+            manager = JobManager(bot)
+            with mock.patch.object(core, "refine", return_value="refined text"):
+                message = await manager.retry_refinement("reset")
+                reset_record = state.jobs_by_id.get("reset")
+                if reset_record is not None:
+                    self.assertIsNone(reset_record.retry_started_at)
+                    self.assertIsNone(reset_record.retry_next_at)
+                for task in list(manager._refine_tasks):
+                    await task
+            return message
+
+        message = asyncio.run(run())
+
+        self.assertIn("Retrying", message)
+        self.assertNotIn("reset", state.jobs_by_id)
+        self.assertEqual(len(bot.documents), 1)
+
+    def test_resume_reschedules_auto_retry(self):
+        bot = FakeBot()
+        job = make_job("resumed", priority=1, sequence=1)
+        job.refine = True
+        state.cache_store.save_raw(
+            job.md5, job.lang, job.fmt, job.sha256_key, "raw text"
+        )
+        now = time.time()
+        state.jobs_by_id[job.job_id] = JobRecord(
+            job=job,
+            status="refine_retrying",
+            counted_active=True,
+            retry_started_at=now,
+            retry_next_at=now,
+        )
+
+        async def run():
+            manager = JobManager(bot)
+            with mock.patch.object(core, "refine", return_value="refined text"):
+                await manager.resume()
+                while True:
+                    retries = list(manager._retry_tasks)
+                    if not retries:
+                        break
+                    await asyncio.gather(*retries)
+
+        asyncio.run(run())
+
+        self.assertNotIn("resumed", state.jobs_by_id)
+        self.assertEqual(len(bot.documents), 1)
 
     def test_retry_refinement_reruns_and_delivers(self):
         bot = FakeBot()

@@ -60,6 +60,8 @@ class JobRecord:
     refinement: Optional[RefinementJob] = None
     counted_active: bool = True
     retry_message_id: Optional[int] = None
+    retry_started_at: Optional[float] = None
+    retry_next_at: Optional[float] = None
 
 
 @dataclass

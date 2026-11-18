@@ -183,6 +183,8 @@ def _record_to_dict(record: JobRecord) -> Dict:
         "status": record.status,
         "counted_active": record.counted_active,
         "retry_message_id": record.retry_message_id,
+        "retry_started_at": record.retry_started_at,
+        "retry_next_at": record.retry_next_at,
     }
 
 
@@ -211,11 +213,19 @@ def _record_from_dict(data: Dict) -> JobRecord:
     retry_message_id = data.get("retry_message_id")
     if retry_message_id is not None:
         retry_message_id = int(retry_message_id)
+    retry_started_at = data.get("retry_started_at")
+    if retry_started_at is not None:
+        retry_started_at = float(retry_started_at)
+    retry_next_at = data.get("retry_next_at")
+    if retry_next_at is not None:
+        retry_next_at = float(retry_next_at)
     return JobRecord(
         job=job,
         status=str(data.get("status", "queued")),
         counted_active=bool(data.get("counted_active", True)),
         retry_message_id=retry_message_id,
+        retry_started_at=retry_started_at,
+        retry_next_at=retry_next_at,
     )
 
 
