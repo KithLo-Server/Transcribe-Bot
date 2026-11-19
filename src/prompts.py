@@ -83,18 +83,18 @@ def text_plan_system_instruction(
 Decide where paragraphs begin and where high-level Markdown headings (`##`, `###`) should be placed.
 
 RULES:
-1. PARAGRAPHS: Plan frequent paragraph breaks (roughly every 2 to 4 sentence units).
+1. PARAGRAPHS: Plan frequent paragraph breaks at natural topic shifts.
 2. HEADINGS: Use headings when there is a thematic shift (typically every 4 to 8 paragraphs). Use `"heading": null` if no headings is given to a paragraph.
 3. The first section must start at unit 1. {language_rule}
 
 Return ONLY JSON in this shape:
 {{"sections": [
     {{"start_unit": 1, "heading": "## Introduction"}},
-    {{"start_unit": 4, "heading": null}},
-    {{"start_unit": 8, "heading": null}},
+    {{"start_unit": 6, "heading": null}},
     {{"start_unit": 12, "heading": null}},
-    {{"start_unit": 16, "heading": "## Next Topic"}},
-    {{"start_unit": 20, "heading": null}}
+    {{"start_unit": 18, "heading": null}},
+    {{"start_unit": 24, "heading": "## Next Topic"}},
+    {{"start_unit": 30, "heading": null}}
 ]}}"""
 
 

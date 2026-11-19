@@ -16,6 +16,8 @@ EstimateTokens = Callable[[str], int]
 CountTokens = Callable[[str], int]
 
 _SENTENCE_ENDINGS = "。！？!?；;…"
+_CLAUSE_ENDINGS = "，,、：:—–"
+_UNIT_ENDINGS = _SENTENCE_ENDINGS + _CLAUSE_ENDINGS
 _CLOSERS = "”’\"'）)]}】」』"
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _SRT_TIME_RE = re.compile(
@@ -86,8 +88,19 @@ def _consume_tail(text: str, index: int) -> int:
     return index
 
 
+def _is_clause_boundary(text: str, index: int, char: str) -> bool:
+    """Rejects splits inside numbers, times and URLs."""
+    previous = text[index - 1] if index else ""
+    following = text[index + 1] if index + 1 < len(text) else ""
+    if previous.isdigit() and following.isdigit():
+        return False
+    if char in ":：" and (following in "/\\" or following == ":"):
+        return False
+    return True
+
+
 def split_text_units(text: str) -> List[str]:
-    """Splits text into sentence-ish units without losing any characters."""
+    """Splits text into sentence/clause-ish units without losing characters."""
     units: List[str] = []
     start = 0
     index = 0
@@ -100,7 +113,12 @@ def split_text_units(text: str) -> List[str]:
             units.append(text[start:end])
             start = index = end
             continue
-        if char in _SENTENCE_ENDINGS:
+        if char in _UNIT_ENDINGS:
+            if char in _CLAUSE_ENDINGS and not _is_clause_boundary(
+                text, index, char
+            ):
+                index += 1
+                continue
             end = _consume_tail(text, index + 1)
             units.append(text[start:end])
             start = index = end

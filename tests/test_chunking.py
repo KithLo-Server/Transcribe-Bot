@@ -24,6 +24,43 @@ class TextChunkingTests(unittest.TestCase):
         text = "no punctuation at all"
         self.assertEqual(chunking.split_text_units(text), [text])
 
+    def test_split_text_units_splits_on_clause_punctuation(self):
+        text = "one, two，three、four; five，six；seven：eight—nine"
+        units = chunking.split_text_units(text)
+
+        self.assertEqual("".join(units), text)
+        self.assertEqual(
+            units,
+            [
+                "one, ",
+                "two，",
+                "three、",
+                "four; ",
+                "five，",
+                "six；",
+                "seven：",
+                "eight—",
+                "nine",
+            ],
+        )
+
+    def test_split_text_units_keeps_numbers_times_and_urls_intact(self):
+        text = (
+            "It costs 1,000 at 12:30 during 2020—2021, then stops. "
+            "See https://example.com."
+        )
+        units = chunking.split_text_units(text)
+
+        self.assertEqual("".join(units), text)
+        self.assertEqual(
+            units,
+            [
+                "It costs 1,000 at 12:30 during 2020—2021, ",
+                "then stops. ",
+                "See https://example.com.",
+            ],
+        )
+
     def test_parse_text_sections_validates_and_normalises(self):
         payload = {
             "sections": [

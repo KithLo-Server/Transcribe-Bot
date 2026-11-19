@@ -131,6 +131,10 @@ class StepTests(unittest.TestCase):
         self.assertIn("document structure planner", prompt)
         self.assertIn("[1] First.", prompt)
         self.assertIn('"start_unit"', prompt)
+        self.assertIn(
+            "Plan frequent paragraph breaks at natural topic shifts", prompt
+        )
+        self.assertNotIn("2 to 4 sentence units", prompt)
 
     def test_render_srt_plan_prompt_lists_candidates(self):
         prompt = manual.render_prompt(
