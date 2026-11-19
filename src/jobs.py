@@ -61,6 +61,15 @@ async def _safe_send_markup(bot, chat_id: int, text: str, reply_markup):
         return None
 
 
+async def _refinement_display_text(
+    text: str, refinement: RefinementJob
+) -> str:
+    """Converts refinement output to the requested Chinese script on delivery."""
+    return await asyncio.to_thread(
+        core.apply_opencc, text, refinement.lang, refinement.zh_format
+    )
+
+
 @lru_cache(maxsize=None)
 def _display_timezone() -> timezone | ZoneInfo:
     """Returns the configured display timezone, falling back to UTC."""
@@ -283,7 +292,9 @@ class JobManager:
             await delivery.send_text_document(
                 self.bot,
                 refinement.chat_id,
-                cached.get("text", ""),
+                await _refinement_display_text(
+                    cached.get("text", ""), refinement
+                ),
                 refinement.fmt,
                 refinement.file_name,
                 "refined",
@@ -873,7 +884,9 @@ class JobManager:
                 await delivery.send_text_document(
                     self.bot,
                     refinement.chat_id,
-                    refined_text,
+                    await _refinement_display_text(
+                        refined_text, refinement
+                    ),
                     refinement.fmt,
                     refinement.file_name,
                     "refined",
@@ -1047,7 +1060,7 @@ class JobManager:
         await delivery.send_text_document(
             self.bot,
             refinement.chat_id,
-            cached.get("text", ""),
+            await _refinement_display_text(cached.get("text", ""), refinement),
             refinement.fmt,
             refinement.file_name,
             "refined",

@@ -834,6 +834,82 @@ class PriorityQueueTests(unittest.TestCase):
         self.assertNotIn("resumed", state.jobs_by_id)
         self.assertEqual(len(bot.documents), 1)
 
+    def test_refined_output_is_opencc_converted_on_delivery(self):
+        bot = FakeBot()
+        record = self._failed_refinement_record("convert")
+        record.job.lang = "Cantonese"
+        record.job.zh_format = "Traditional Chinese"
+        refinement = record.refinement
+        refinement.lang = "Cantonese"
+        refinement.zh_format = "Traditional Chinese"
+
+        async def run():
+            manager = JobManager(bot)
+            with mock.patch.object(core, "refine", return_value="refined text"):
+                with mock.patch.object(
+                    core, "apply_opencc", return_value="converted text"
+                ) as convert:
+                    with mock.patch.object(
+                        jobs.delivery,
+                        "send_text_document",
+                        new_callable=mock.AsyncMock,
+                    ) as send:
+                        with mock.patch.object(
+                            state.cache_store, "save_refinement"
+                        ) as save:
+                            await manager._run_refinement(
+                                refinement.job_id, refinement
+                            )
+            return convert, send, save
+
+        convert, send, save = asyncio.run(run())
+
+        convert.assert_called_once_with(
+            "refined text", "Cantonese", "Traditional Chinese"
+        )
+        save.assert_called_once()
+        self.assertEqual(save.call_args.args[-1], "refined text")
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.args[2], "converted text")
+
+    def test_cached_refinement_is_opencc_converted_on_delivery(self):
+        bot = FakeBot()
+        record = self._failed_refinement_record("cached-convert")
+        record.job.lang = "Cantonese"
+        record.job.zh_format = "Traditional Chinese"
+        record.status = "refine_cache"
+        refinement = record.refinement
+        refinement.lang = "Cantonese"
+        refinement.zh_format = "Traditional Chinese"
+
+        async def run():
+            manager = JobManager(bot)
+            with mock.patch.object(
+                state.cache_store,
+                "load_refinement",
+                return_value={"text": "cached text"},
+            ):
+                with mock.patch.object(
+                    core, "apply_opencc", return_value="converted cached"
+                ) as convert:
+                    with mock.patch.object(
+                        jobs.delivery,
+                        "send_text_document",
+                        new_callable=mock.AsyncMock,
+                    ) as send:
+                        await manager.resolve_refinement_cache(
+                            "cached-convert", True
+                        )
+            return convert, send
+
+        convert, send = asyncio.run(run())
+
+        convert.assert_called_once_with(
+            "cached text", "Cantonese", "Traditional Chinese"
+        )
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.args[2], "converted cached")
+
     def test_retry_refinement_reruns_and_delivers(self):
         bot = FakeBot()
         record = self._failed_refinement_record("again")
